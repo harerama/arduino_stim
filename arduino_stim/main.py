@@ -4,6 +4,9 @@
 Code licensed under the GNU Affero General Public License v3 or later (AGPLv3+)
 """
 import sys
+import glob
+import serial
+
 from collections import deque
 
 import serial.tools.list_ports
@@ -28,11 +31,12 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
         self.stopButton.setEnabled(False)
         self.serial = ArduinoSerial(self.signal)
         self.signal.connect(self.values_received)
-        ports = list(serial.tools.list_ports.comports()) + [["loop://"]]
-        for port in ports:
-            self.comPort.addItem(port[0])
 
-        self.comPort.currentIndexChanged.connect(lambda idx: self.serial.connect_to_port(ports[idx][0]))
+        ports = ["Select port..."] + list(serial_ports()) + ["loop://"]
+        for port in ports:
+            self.comPort.addItem(port)
+
+        self.comPort.currentIndexChanged.connect(lambda idx: self.serial.connect_to_port(ports[idx]))
 
         updateuitimer = QtCore.QTimer(self)
         updateuitimer.timeout.connect(self.regular_update)
@@ -105,6 +109,37 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
         self.startButton.setEnabled(not self.stopButton.isEnabled())
         self.serial.stop()
 
+
+def serial_ports():
+    """Lists serial ports
+
+    :raises EnvironmentError:
+        On unsupported or unknown platforms
+    :returns:
+        A list of available serial ports
+    """
+    if sys.platform.startswith('win'):
+        ports = ['COM' + str(i + 1) for i in range(256)]
+
+    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+        # this is to exclude your current terminal "/dev/tty"
+        ports = glob.glob('/dev/tty[A-Za-z]*')
+
+    elif sys.platform.startswith('darwin'):
+        ports = glob.glob('/dev/tty.*')
+
+    else:
+        raise EnvironmentError('Unsupported platform')
+
+    result = []
+    for port in ports:
+        try:
+            s = serial.Serial(port)
+            s.close()
+            result.append(port)
+        except (OSError, serial.SerialException):
+            pass
+    return result
 
 logging.basicConfig(level=logging.INFO)
 if __name__ == '__main__':

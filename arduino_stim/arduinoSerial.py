@@ -103,7 +103,6 @@ class ArduinoSerial:
         while True:
             if self.port is not None and self.port.inWaiting() > 0:
                 chk = 0
-                logging.info("Reading")
                 heading = self.port.read(1)
                 chk ^= heading[0]
                 length = self.port.read(1)[0]
@@ -121,6 +120,7 @@ class ArduinoSerial:
                         self.handle_data(data)
                 else:
                     logging.warning("Empty packet")
+                    self.port.flushInput()
             else:
                 time.sleep(0.01)
 
@@ -133,7 +133,7 @@ class ArduinoSerial:
 
     def connect_to_port(self, port):
         logging.info("Connecting to " + port)
-        self.port = serial.serial_for_url(port)
+        self.port = serial.serial_for_url(port, baudrate=9600)
 
         if port == "loop://":
             PySide.QtCore.QTimer.singleShot(5000, self.sendDummyUpdate)

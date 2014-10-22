@@ -66,7 +66,7 @@ void processSerialMessage();
 const float ABSOLUTE_MAX_LIMIT_CURRENT = 0.01; // 10 mA - WARNING: do not change this value, this is a hard limit that will trigger safety shutdown
 
 const float RESISTANCE = 22; // Value in Ohms (so this is a small resistor)
-const int INTERVAL_IN_MS = 250 * 10;
+const int INTERVAL_IN_MS = 250 * 4;
 const int MAX_OVERCURRENT_ALERT_TIMEOUT = 2000; // In ms, after this amount of time in overcurrent, shutdown everything in emergency
 const int FAST_CYCLE_PERIOD_USEC = 2000; // One fast cycle every 2 ms
 const float MAX_RESISTANCE = 255/0.5; // System will assume that a usable connection is present as long as we can get at 0.2 mA at full power
@@ -77,7 +77,7 @@ const Parameter INTERNAL_STATE[6] = {
 const Parameter STATE_UPDATE[1] = { 
   actual_current };
 
-float porportionalFactor = 1;
+float proportionalFactor = 0.1;
 volatile float scale_factor = 1;
 
 // Status
@@ -258,10 +258,10 @@ ISR(TIMER1_COMPA_vect)
 
     //overwrite the target value with the data from the playback sequence, if neccesary
     if (playback) {
-      porportionalFactor=1; //optimize the control loop for fast response
+      proportionalFactor=1; //optimize the control loop for fast response
       handlePlaybackSequence(); //keep the output updated
       //targetCurrent=abs(playbackPower[playbackPosition]); //set the power appropriately
-      porportionalFactor=0.3; //optimize the control loop for accuracy
+      proportionalFactor=0.3; //optimize the control loop for accuracy
       if (playbackPower[playbackPosition] > 0) { //set the polarity of the signal
         polarity=true;
       }
@@ -289,19 +289,31 @@ ISR(TIMER1_COMPA_vect)
       setPowerDistribution(); // Figure out how to set the pins to get correct polarity
 
       if (connectionQualityIndex <= MAX_RESISTANCE || outputCurrent < 0.5) {
-        // Compute tapValue accordingly
+        float dtap = 1;
+        if (abs(current) > 0.000001) {
+          dtap = 5 * abs(current - outputCurrent) / (current * outputCurrent) / (1000000 / 255) * proportionalFactor;
+        }
         if (abs(current) > abs(outputCurrent)) {
-          tapValue = tapValue - (abs(current) - abs(outputCurrent)) * porportionalFactor;
+          tapValue -= dtap;
         }
         else if (abs(current) < abs(outputCurrent)) {
-          tapValue=tapValue + (abs(outputCurrent) - abs(current)) * porportionalFactor;
+          tapValue += dtap;
         }
+        // Compute tapValue accordingly
+        /*
+        if (abs(current) > abs(outputCurrent)) {
+          tapValue = tapValue - (abs(current) - abs(outputCurrent)) * proportionalFactor;
+        }
+        else if (abs(current) < abs(outputCurrent)) {
+          tapValue=tapValue + (abs(outputCurrent) - abs(current)) * proportionalFactor;
+        }
+        */
         if (tapValue > 255)
         {
           tapValue = 255;
         }
-        if (tapValue < 1) {
-          tapValue=1;
+        if (tapValue < 0) {
+          tapValue=0;
         }
       }
     }
@@ -497,7 +509,7 @@ void loop(void)
   }
 }
 
-void sendFloatParamValue(const byte p, float value, byte chk) {
+void sendFloatParamValue(const byte p, float value, byte& chk) {
   Serial.write(p);
   chk ^= p;
   char data[4];
@@ -507,15 +519,21 @@ void sendFloatParamValue(const byte p, float value, byte chk) {
     chk ^= data[i];
 }
 
-void sendInternalState() {
+void sendParams(int count, const Parameter* params) {
   byte chk = 0;
   Serial.write(0);
   chk ^= 0;
-  byte length = 5*3 + 1;
+  byte length = 5*count + 1;
   Serial.write(length);
   chk ^= length;
-  sendParams(6, INTERNAL_STATE);
+
+  for (int i = 0; i<count; ++i)
+    sendFloatParamValue(params[i], getValue(params[i]), chk);
   Serial.write(chk);
+}
+
+void sendInternalState() {
+  sendParams(6, INTERNAL_STATE);
 }
 
 float getValue(Parameter p) {
@@ -534,20 +552,6 @@ float getValue(Parameter p) {
     return NAN;
   }
 }
-
-void sendParams(int count, const Parameter* params) {
-  byte chk = 0;
-  Serial.write(0);
-  chk ^= 0;
-  byte length = 5*count + 1;
-  Serial.write(length);
-  chk ^= length;
-
-  for (int i = 0; i<count; ++i)
-    sendFloatParamValue(params[i], getValue(params[i]), chk);
-  Serial.write(chk);
-}
-
 void processSerialMessage() {
   if (Serial.available() > 2) {
     byte chk = 0;
@@ -559,10 +563,10 @@ void processSerialMessage() {
     int readB = Serial.readBytes(buffer, length);
     for (int i = 0; i<length; i++)
       chk ^= buffer[i];
-    byte expected = Serial.read();
+    byte expected = buffer[length-1];
     byte computed = chk;
 
-    if (chk != expected) {
+    if (chk != 0) {
       // Bad packet
 
       // Empty incoming buffer
@@ -573,7 +577,7 @@ void processSerialMessage() {
       chk = 0;
       Serial.write(0);
       chk ^= 0;
-      Serial.write(length + 6);
+      Serial.write(length + 7);
       chk ^= length + 6;
       Serial.write(bad_packet);
       chk ^= bad_packet;
@@ -813,6 +817,7 @@ void conservativeWrite(int address, byte value) { //reduce wear on the EEPROM by
     EEPROM.write(address, value);
   }
 }
+
 
 
 
