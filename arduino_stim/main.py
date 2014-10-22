@@ -5,14 +5,15 @@ Code licensed under the GNU Affero General Public License v3 or later (AGPLv3+)
 """
 import sys
 import glob
-import serial
-
 from collections import deque
 
+import serial
 import serial.tools.list_ports
 from PySide.QtGui import *
+
 from arduinoSerial import *
 from arduinoSerial import MessageType
+from arduino_stim.arduinoSerial import ArduinoSerial
 from arduino_stim.arduinoStim import *
 
 
@@ -36,11 +37,19 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
         for port in ports:
             self.comPort.addItem(port)
 
-        self.comPort.currentIndexChanged.connect(lambda idx: self.serial.connect_to_port(ports[idx]))
+        self.comPort.currentIndexChanged.connect(
+            lambda idx: self.connect_to_port(ports[idx])
+        )
 
         updateuitimer = QtCore.QTimer(self)
         updateuitimer.timeout.connect(self.regular_update)
         updateuitimer.start(1000)
+
+    def connect_to_port(self, port):
+        self.set_disconnected()
+        self.serial.disconnect()
+        self.serial = ArduinoSerial(self.signal)
+        self.serial.connect_to_port(port)
 
     def regular_update(self):
         if time.time() - self.lastCompleteUpdate > 2:
@@ -59,7 +68,8 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
                 lambda x: self.serial.set_float_parameter_limit(MessageType.target_current.value, x))
             self.maxCurrentMADoubleSpinBox.valueChanged.connect(
                 lambda x: self.serial.set_float_parameter_limit(MessageType.safety_limit.value, x / 1000))
-            self.scalingDoubleSpinBox.valueChanged.connect(lambda x: self.serial.set_float_parameter_limit(MessageType.scaling.value, x))
+            self.scalingDoubleSpinBox.valueChanged.connect(
+                lambda x: self.serial.set_float_parameter_limit(MessageType.scaling.value, x))
             self.stopButton.clicked.connect(self.stop)
             self.connected = True
         self.lastCompleteUpdate = time.time()
@@ -95,6 +105,9 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
         elif msgtype == MessageType.scaling.value:
             self.actualScalingLineEdit.setText("{0:4g}".format(value))
         elif msgtype == MessageType.max_power_for_channel.value:
+            # self.actualMaxLineEdit.setText("{0:4g}".format(value))
+            pass
+        elif msgtype == MessageType.polarity.value:
             self.actualMaxLineEdit.setText("{0:4g}".format(value))
 
     # Value received from the device
@@ -106,7 +119,6 @@ class MainWindow(QDialog, Ui_ArduinoStimControl):
 
     def stop(self):
         self.stopButton.setEnabled(False)
-        self.startButton.setEnabled(not self.stopButton.isEnabled())
         self.serial.stop()
 
 
@@ -140,6 +152,7 @@ def serial_ports():
         except (OSError, serial.SerialException):
             pass
     return result
+
 
 logging.basicConfig(level=logging.INFO)
 if __name__ == '__main__':

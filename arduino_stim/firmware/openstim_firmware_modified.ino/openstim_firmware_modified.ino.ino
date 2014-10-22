@@ -23,6 +23,7 @@ enum Parameter {
   scaling = 5,
   max_power_for_channel = 6,
   current_override = 7,
+  polarity_value = 8,
 
   playback_speed = 10,
   playback_power = 11,
@@ -72,8 +73,8 @@ const int FAST_CYCLE_PERIOD_USEC = 2000; // One fast cycle every 2 ms
 const float MAX_RESISTANCE = 255/0.5; // System will assume that a usable connection is present as long as we can get at 0.2 mA at full power
 const float SHAM_RAMPDOWN_RATE=0.006; // How fast current will ramp down during a sham session
 
-const Parameter INTERNAL_STATE[6] = { 
-  actual_current, target_current, safety_limit, scaling, tap_value, voltage_value };
+const Parameter INTERNAL_STATE[7] = { 
+  actual_current, target_current, safety_limit, scaling, tap_value, voltage_value, polarity_value };
 const Parameter STATE_UPDATE[1] = { 
   actual_current };
 
@@ -269,9 +270,6 @@ ISR(TIMER1_COMPA_vect)
         polarity=false;
       }
     }
-    else { //not in playback mode any longer, so stop messing with the output and reset everything to normal polarity
-      polarity = targetCurrent >= 0;
-    } 
 
     if (overrideTapOn) return;
 
@@ -469,7 +467,7 @@ void loop(void)
     targetCurrent = targetCurrent + (powerDelta * INTERVAL_IN_MS / 1000);
 
     if (abs(targetCurrent) > abs(maxPower)) {
-      //targetCurrent = maxPower;
+      targetCurrent = maxPower;
     }
 
     //handle zero-crossing problems
@@ -533,7 +531,7 @@ void sendParams(int count, const Parameter* params) {
 }
 
 void sendInternalState() {
-  sendParams(6, INTERNAL_STATE);
+  sendParams(7, INTERNAL_STATE);
 }
 
 float getValue(Parameter p) {
@@ -548,6 +546,9 @@ float getValue(Parameter p) {
     return polarity ? getAvgCurrent() : -getAvgCurrent();
   case safety_limit:
     return safetyLimit;
+  case polarity_value:
+    if (polarity) return 1;
+    return -1;
   default:
     return NAN;
   }
@@ -669,7 +670,8 @@ void handleCommand(char* input, int bytecount) {
   case stop:
     { //set to emergency off
       operationMode = EMERGENCY_SHUTDOWN;
-      powerDelta=0;
+      targetCurrent = 0;
+      powerDelta = 0;
       overrideTapOn=false;
       break;
     }

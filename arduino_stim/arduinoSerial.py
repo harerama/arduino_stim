@@ -25,6 +25,7 @@ class MessageType(Enum):
     scaling = 5
     max_power_for_channel = 6
     current_override = 7
+    polarity = 8
 
     playback_speed = 10
     playback_power = 11
@@ -85,6 +86,9 @@ class ArduinoSerial:
 
     def stop(self):
         logging.info("Stopping stimulation")
+        data = [MessageType.stop.value]
+        msg = SerialMessage(data)
+        msg.send(self.port)
 
     def handle_data(self, data):
         index = 0
@@ -100,7 +104,7 @@ class ArduinoSerial:
             self.signal.emit(values)
 
     def read_from_port(self):
-        while True:
+        while not self.stopped:
             if self.port is not None and self.port.inWaiting() > 0:
                 chk = 0
                 heading = self.port.read(1)
@@ -126,6 +130,7 @@ class ArduinoSerial:
 
     def __init__(self, signal):
         self.port = None
+        self.stopped = False
         self.signal = signal
         self.thread = threading.Thread(target=self.read_from_port)
         self.thread.setDaemon(True)  # Makes sure the thread is killed when window is closed
@@ -138,6 +143,8 @@ class ArduinoSerial:
         if port == "loop://":
             PySide.QtCore.QTimer.singleShot(5000, self.sendDummyUpdate)
 
+    def disconnect(self):
+        self.stopped = True
 
     @staticmethod
     def add_float(data, value):
