@@ -3,7 +3,6 @@ const boolean DEBUG = true; // If true, the device will regularly send all inter
 const int BAUD_RATE = 57600;
 
 #include <SoftwareSerial.h>
-SoftwareSerial mySerial(10, 11); // RX, TX
 
 #define NUMCHANNELS 6
 #define HEADERLEN 4
@@ -34,7 +33,9 @@ void setup(void)
   TXBuf[1] = 0x5A;	//Sync 1
   TXBuf[2] = 2;		//Protocol version
   TXBuf[3] = 0;		//Packet counter
-  mySerial.begin(BAUD_RATE);
+  
+  delay(100);
+  Serial.begin(BAUD_RATE);
 }
 
 ISR(TIMER1_COMPA_vect)
@@ -54,6 +55,7 @@ void loop() {
     TXBuf[NUMCHANNELS * 2 + HEADERLEN] = 0b00000001;
     Serial.write(TXBuf, PACKETLEN);
     dataReady = false;
-  }  
+  }
+  delay(1);
 }
 
