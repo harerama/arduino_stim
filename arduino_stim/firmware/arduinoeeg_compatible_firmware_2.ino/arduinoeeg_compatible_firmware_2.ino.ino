@@ -1,8 +1,5 @@
 #define ANALOG_IN 0
-const boolean DEBUG = true; // If true, the device will regularly send all internal parameters to the computer
-const int BAUD_RATE = 57600;
-
-#include <SoftwareSerial.h>
+#define BAUD_RATE 57600
 
 #define NUMCHANNELS 6
 #define HEADERLEN 4
@@ -23,7 +20,8 @@ void setup(void)
   cli();          // disable global interrupts
   TCCR1A = 0;     // set entire TCCR1A register to 0
   TCCR1B = 0;     // same for TCCR1B
-  OCR1A = FOSC / 256 - 1 ; // set compare match register to desired timer count: 256 Hz
+  OCR1A = FOSC / 256 ; // set compare match register to desired timer count: 256 Hz
+  OCR1A = FOSC / 256 +20 ; // Manual frequency adjustment for frequency (empirical)
   TCCR1B |= (1 << WGM12); // turn on CTC mode:   
   TCCR1B |= (1 << CS10); // runes at clock frequency (multiplier = 1)
   TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt: 
@@ -56,6 +54,5 @@ void loop() {
     Serial.write(TXBuf, PACKETLEN);
     dataReady = false;
   }
-  delay(1);
 }
 
